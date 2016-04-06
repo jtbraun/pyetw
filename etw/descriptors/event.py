@@ -15,6 +15,7 @@
 """EventClass and EventCategory base classes for Event descriptors."""
 import inspect
 from etw.descriptors import binary_buffer
+from etw.evntrace import LP_EVENT_TRACE, LP_EVENT_RECORD
 
 
 class EventClass(object):
@@ -54,17 +55,24 @@ class EventClass(object):
     """Initialize by extracting event trace header and MOF data.
 
     Args:
-      event_trace: a POINTER(EVENT_TRACE) for the current event.
+      event_trace: a POINTER(EVENT_TRACE) or POINTER(EVENT_RECORD) for the current event.
       is_64_bit_log: whether the log is from a 64 bit system.
     """
-    header = event_trace.contents.Header
+    if (isinstance(event_trace, LP_EVENT_TRACE)):
+      header = event_trace.contents.Header
+      user_data, user_data_length = (event_trace.contents.MofData, event_trace.contents.MofDataLength)
+    elif (isinstance(event_trace, LP_EVENT_RECORD)):
+      header = event_trace.contents.EventHeader
+      user_data, user_data_length = (event_trace.contents.UserData, event_trace.contents.UserDataLength)
+    else:
+      raise TypeError("Unrecognized event format")
+    
     self.process_id = header.ProcessId
     self.thread_id = header.ThreadId
 
     self.raw_time_stamp = header.TimeStamp
     self.time_stamp = log_session.SessionTimeToTime(header.TimeStamp)
-    reader = binary_buffer.BinaryBufferReader(event_trace.contents.MofData,
-                                              event_trace.contents.MofLength)
+    reader = binary_buffer.BinaryBufferReader(user_data, user_data_length)
     for name, field in self._fields_:
       setattr(self, name, field(log_session, reader))
 

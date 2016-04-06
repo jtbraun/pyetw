@@ -510,6 +510,44 @@ class EVENT_TRACE(ct.Structure):
               ('MofLength', ct.c_ulong),
               ('ClientContext', ct.c_ulong)]
 
+LP_EVENT_TRACE = ct.POINTER(EVENT_TRACE)
+
+
+class EVENT_DESCRIPTOR(ct.Structure):
+    _fields_ = [('Id', ct.c_ushort),
+                ('Version', ct.c_ubyte),
+                ('Channel', ct.c_ubyte),
+                ('Level', ct.c_ubyte),
+                ('Opcode', ct.c_ubyte),
+                ('Task', ct.c_ushort),
+                ('Keyword', ct.c_ulonglong)]
+
+
+class EVENT_HEADER(ct.Structure):
+    _fields_ = [('Size', ct.c_ushort),
+                ('HeaderType', ct.c_ushort),
+                ('Flags', ct.c_ushort),
+                ('EventProperty', ct.c_ushort),
+                ('ThreadId', ct.c_ulong),
+                ('ProcessId', ct.c_ulong),
+                ('TimeStamp', ct.c_ulonglong),
+                ('ProviderId', GUID),
+                ('EventDescriptor', EVENT_DESCRIPTOR),
+                ('ProcessorTime', ct.c_ulonglong),
+                ('ActivityId', GUID)]
+
+
+class EVENT_RECORD(ct.Structure):
+    _fields_ = [('EventHeader', EVENT_HEADER),
+                ('BufferContext', ct.c_ulong),
+                ('ExtendedDataCount', ct.c_ushort),
+                ('UserDataLength', ct.c_ushort),
+                ('ExtendedData', ct.c_void_p),
+                ('UserData', ct.c_void_p),
+                ('UserContext', ct.c_void_p)]
+
+LP_EVENT_RECORD = ct.POINTER(EVENT_RECORD)
+
 
 class SYSTEMTIME(ct.Structure):
   _fields_ = [('wYear', wt.WORD),
@@ -567,10 +605,17 @@ class EVENT_TRACE_LOGFILE(ct.Structure):
 
 # The type for event trace callbacks.
 EVENT_CALLBACK = ct.WINFUNCTYPE(None, ct.POINTER(EVENT_TRACE))
+EVENT_RECORD_CALLBACK = ct.WINFUNCTYPE(None, ct.POINTER(EVENT_RECORD))
 EVENT_TRACE_BUFFER_CALLBACK = ct.WINFUNCTYPE(ct.c_ulong,
                                              ct.POINTER(EVENT_TRACE_LOGFILE))
 
 
+class _U(ct.Union):
+    _fields_ = [('EventCallback', EVENT_CALLBACK),
+                ('EventRecordCallback', EVENT_RECORD_CALLBACK)]
+
+
+EVENT_TRACE_LOGFILE._anonymous_ = ('u',)
 EVENT_TRACE_LOGFILE._fields_ = [
     ('LogFileName', ct.c_wchar_p),
     ('LoggerName', ct.c_wchar_p),
@@ -583,7 +628,7 @@ EVENT_TRACE_LOGFILE._fields_ = [
     ('BufferSize', ct.c_ulong),
     ('Filled', ct.c_ulong),
     ('EventsLost', ct.c_ulong),
-    ('EventCallback', EVENT_CALLBACK),
+    ('u', _U),
     ('IsKernelTrace', ct.c_ulong),
     ('Context', ct.c_void_p)]
 
