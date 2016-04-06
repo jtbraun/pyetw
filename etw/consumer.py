@@ -90,9 +90,10 @@ class _TraceLogSession(object):
   The purpose of this class is to maintain per-session state, such as
   the ETW time to wall-clock conversion state, the event handle, etc.
   """
-  def __init__(self, event_source, raw_time):
+  def __init__(self, event_source, raw_time, new_format):
     self._event_source = event_source
     self._raw_time = raw_time
+    self._new_format = new_format
     # Assume FILETIME conversion until we get other data.
     self._time_epoch_delta = util.FILETIME_EPOCH_DELTA_S
     self._time_multiplier = util.FILETIME_TO_SECONDS_MULTIPLIER
@@ -101,6 +102,8 @@ class _TraceLogSession(object):
         self._ProcessBufferCallback)
     self._event_callback = evntrace.EVENT_CALLBACK(
         self._ProcessEventCallback)
+    self._event_record_callback = evntrace.EVENT_RECORD_CALLBACK(
+        self._ProcessEventRecordCallback)
     self._handle = None
     self._start_time = None
     self._processed_first_event = False
@@ -136,7 +139,11 @@ class _TraceLogSession(object):
     if self._raw_time:
       logfile.ProcessTraceMode = evntcons.PROCESS_TRACE_MODE_RAW_TIMESTAMP
     logfile.BufferCallback = self._buffer_callback
-    logfile.EventCallback = self._event_callback
+    if self._new_format:
+      logfile.ProcessTraceMode |= evntcons.PROCESS_TRACE_MODE_EVENT_RECORD
+      logfile.EventRecordCallback = self._event_record_callback
+    else:
+      logfile.EventCallback = self._event_callback
     self._handle = evntrace.OpenTrace(byref(logfile))
     self._ProcessHeader(logfile.LogfileHeader)
 
@@ -193,6 +200,18 @@ class _TraceLogSession(object):
     except:
       logging.exception('Exception in _ProcessEventCallback')
 
+  def _ProcessEventRecordCallback(self, event_record):
+    try:
+      # When in raw time mode, we need special processing
+      # for the first event to calibrate the session start time.
+      if not self._processed_first_event:
+        self._ProcessFirstEvent(event_record)
+        self._processed_first_event = True
+
+      self._event_source._ProcessEventRecordCallback(self, event_record)
+    except:
+      logging.exception('Exception in _ProcessEventRecordCallback')
+
 class TraceEventSource(object):
   """An Event Tracing for Windows consumer class.
 
@@ -209,7 +228,7 @@ class TraceEventSource(object):
   session, and no more than 63 sessions overall.
   """
 
-  def __init__(self, handlers=[], raw_time=False):
+  def __init__(self, handlers=[], raw_time=False, new_format=True):
     """Creates an idle consumer.
 
     Args:
@@ -221,6 +240,7 @@ class TraceEventSource(object):
     self._stop = False
     self._handlers = handlers[:]
     self._raw_time = raw_time
+    self._new_format = new_format
     self._trace_sessions = []
     self._handler_cache = dict()
 
@@ -244,7 +264,7 @@ class TraceEventSource(object):
     Args:
       name: name of the session to open.
     """
-    session = _TraceLogSession(self, self._raw_time)
+    session = _TraceLogSession(self, self._raw_time, self._new_format)
     session.OpenRealtimeSession(name)
     self._trace_sessions.append(session)
 
@@ -306,6 +326,31 @@ class TraceEventSource(object):
         for handler in handlers:
           handler(event_obj)
 
+  def ProcessEventRecord(self, session, event_record):
+    """Process a single event.
+
+    Retrieve the guid, version and type from the event and try to find a handler
+    for the event and event class that can parse the event data. If both exist,
+    dispatch the event object to the handler.
+
+    Args:
+      session: the _TraceLogSession on which this event occurred.
+      event_trace: a POINTER(EVENT_RECORD) for the current event.
+    """
+    header = event_record.contents.EventHeader
+    guid = str(header.ProviderId)
+    version = header.EventDescriptor.Version
+    kind = header.EventDescriptor.Id
+
+    # Look for a handler and EventClass for the event.
+    event_class = event.EventClass.Get(guid, version, kind)
+    if event_class:
+      handlers = self._GetHandlers(guid, kind)
+      if handlers:
+        event_obj = event_class(session, event_record)
+        for handler in handlers:
+          handler(event_obj)
+
   def ProcessBuffer(self, session, buffer):
     """Process a buffer.
 
@@ -339,6 +384,19 @@ class TraceEventSource(object):
     except:
       # Terminate parsing on exception.
       logging.exception("Exception in ProcessEvent, terminating parsing")
+      self._stop = True
+
+  def _ProcessEventRecordCallback(self, session, event_record):
+    # Don't process the event if we're stopping. Note that we can only
+    # terminate the processing once a whole buffer has been processed.
+    if self._stop:
+      return
+
+    try:
+      self.ProcessEventRecord(session, event_record)
+    except:
+      # Terminate parsing on exception.
+      logging.exception("Exception in ProcessEventRecord, terminating parsing")
       self._stop = True
 
   def _GetHandlers(self, guid, kind):
