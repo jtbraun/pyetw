@@ -206,6 +206,11 @@ class BinaryBufferReader(object):
         self.Consume(len(val) * ctypes.sizeof(ctypes.c_wchar))
         return val
 
+    def ReadCountedBlob(self):
+        blob_length = self.ReadUInt32()
+        val = "".join([chr(self.ReadUInt8()) for i in xrange(blob_length)])
+        return val
+
     _MINIMUM_SID_SIZE = 8
 
     def ReadSid(self, is_64_bit_ptrs):

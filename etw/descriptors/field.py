@@ -93,6 +93,10 @@ def CountedWString(unused_session, reader):
   return reader.ReadCountedWString()
 
 
+def CountedBlob(unused_session, reader):
+  return reader.ReadCountedBlob()
+
+
 def Sid(session, reader):
   return reader.ReadSid(session.is_64_bit_log)
 
