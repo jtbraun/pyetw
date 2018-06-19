@@ -16,6 +16,7 @@
 from ctypes import addressof, byref, cast, pointer, sizeof
 from ctypes import POINTER, Structure
 import evntrace
+import evntprov
 import winerror
 
 class MofEvent(object):
@@ -199,3 +200,94 @@ class TraceProvider(object):
     self._enable_flags = 0
     self._session_handle = None
     return winerror.ERROR_SUCCESS
+
+
+
+class EventProvider(object):
+  """An event provider for Event Tracing for Windows.
+
+  To use select a provider GUID, then instantiate a EventProvider with the GUID.
+  The EventProvider takes care of registering with ETW, handling ETW callbacks
+  to BUGBUG.
+
+  BUGBUG: To issue an event, first check the enable_level and the enable_mask.
+  BUGBUG: If an event should be issued, create a MofEvent, set its fields to point
+  BUGBUG: to the event data, and pass it to Log().
+  """
+  def __init__(self, provider_guid):
+    """Create an EventProvider with a given provider_guid name.
+
+    Args:
+      provider_guid: the GUID that names this provider.
+    """
+    self._guid = provider_guid
+
+
+  # def ShouldLog(self, level, enable_flag):
+  #   """Test whether an event should be logged at this time.
+
+  #   Args:
+  #     level: the trace level at which the event would be logged.
+  #     enable_flags: a mask of enable bits that should trigger the event.
+
+  #   Returns:
+  #     true iff the current logging level is greater or equal to level, and
+  #     any of the bits in enable_flags are currently enabled.
+  #   """
+  #   return (self.enable_level >= level and
+  #           (self.enable_flags & enable_flag) != 0)
+
+  # def Log(self, mof_event):
+  #   """Outputs mof_event to any listening trace session(s).
+
+  #   Args:
+  #     mof_event: a MofEvent instance initialized with the data to log.
+  #   """
+  #   return evntrace.TraceEvent(self._session_handle,
+  #                              byref(mof_event.event.header))
+
+  # def _GetEnableLevel(self):
+  #   return self._enable_level
+
+  # def _GetEnableFlags(self):
+  #   return self._enable_flags
+
+  # enable_level = property(_GetEnableLevel,
+  #                         doc='Retrieves the current enable level')
+
+  # enable_flags = property(_GetEnableFlags,
+  #                         doc='Retrieves the current enable flags')
+
+  # def OnEventsEnabled(self):
+  #   """An event hook for overriding in subclasses.
+
+  #   Called when events have been enabled, or when the log level or enable mask
+  #   has changed. The new enable_level and enable_mask are available from
+  #   the properties in this call.
+  #   """
+  #   pass
+
+  # def OnEventsDisabled(self):
+  #   """An event hook for overriding in subclasses.
+
+  #   Called just before events are disabled, the old enable_level and
+  #   enable_mask are still in effect.
+  #   """
+  #   pass
+
+  # def _EnableEvents(self, buffer):
+  #   # We're in a control callback and events were just enabled
+  #   # or changed, retrieve our session properties.
+  #   self._session_handle = evntrace.GetTraceLoggerHandle(buffer)
+  #   self._enable_level = evntrace.GetTraceEnableLevel(self._session_handle)
+  #   self._enable_flags = evntrace.GetTraceEnableFlags(self._session_handle)
+  #   self.OnEventsEnabled()
+  #   return winerror.ERROR_SUCCESS
+
+  # def _DisableEvents(self):
+  #   # We're in a control callback and events were just disabled.
+  #   # Clear our session properties.
+  #   self._enable_level = 0
+  #   self._enable_flags = 0
+  #   self._session_handle = None
+  #   return winerror.ERROR_SUCCESS

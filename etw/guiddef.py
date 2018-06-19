@@ -43,3 +43,16 @@ class GUID(ctypes.Structure):
              self.Data4[0], self.Data4[1],
              self.Data4[2], self.Data4[3], self.Data4[4],
              self.Data4[5], self.Data4[6], self.Data4[7])
+
+  def __hash__(self):
+    # TODO: this could just hash the fields
+    return hash(str(self))
+
+  def __eq__(self, rhs):
+    arr = [self.Data1 == rhs.Data1,
+           self.Data2 == rhs.Data2,
+           self.Data3 == rhs.Data3]
+    arr.extend(
+      self.Data4[i] == self.Data4[i]
+      for i in xrange(8))
+    return all(arr)
